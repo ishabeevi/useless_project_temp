@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bunk Aakano? 📊 — BUNKVERSE</title>
+  <meta name="description" content="BUNKVERSE Attendance Calculator — Calculate if you can bunk based on KTU academic calendar.">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    /* ── Bunk Page Specific ── */
+    .bunk-layout {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    .form-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 40px;
+      backdrop-filter: blur(12px);
+    }
+
+    /* Subject tags */
+    .subject-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background: rgba(124,58,237,0.1);
+      border: 1px solid rgba(124,58,237,0.25);
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--purple-light);
+      cursor: pointer;
+      transition: var(--transition-fast);
+    }
+    .subject-tag:hover { background: rgba(124,58,237,0.2); border-color: var(--purple); }
+    .subject-tag.selected { background: rgba(124,58,237,0.25); border-color: var(--purple); }
+
+    /* Result section */
+    .result-section { display: none; }
+    .result-section.visible { display: block; animation: fadeInUp 0.6s ease; }
+
+    /* Big percentage display */
+    .attendance-big {
+      text-align: center;
+      padding: 40px 24px;
+      position: relative;
+    }
+
+    .attendance-circle {
+      width: 180px;
+      height: 180px;
+      border-radius: 50%;
+      margin: 0 auto 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      border: 3px solid transparent;
+      transition: var(--transition);
+    }
+
+    .attendance-circle.safe {
+      border-color: var(--green);
+      box-shadow: 0 0 40px var(--green-glow), inset 0 0 40px rgba(16,185,129,0.05);
+    }
+    .attendance-circle.warning {
+      border-color: var(--gold);
+      box-shadow: 0 0 40px var(--gold-glow), inset 0 0 40px rgba(245,158,11,0.05);
+    }
+    .attendance-circle.danger {
+      border-color: var(--red);
+      box-shadow: 0 0 40px var(--red-glow), inset 0 0 40px rgba(239,68,68,0.05);
+      animation: pulse-glow-red 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse-glow-red {
+      0%, 100% { box-shadow: 0 0 40px var(--red-glow); }
+      50% { box-shadow: 0 0 70px rgba(239,68,68,0.6); }
+    }
+
+    .attendance-pct {
+      font-size: 3rem;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .attendance-pct-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .attendance-change {
+      font-size: 0.9rem;
+      font-weight: 600;
+      margin-top: 8px;
+    }
+
+    /* Verdict card */
+    .verdict-big {
+      padding: 32px;
+      text-align: center;
+      border-radius: var(--radius-lg);
+      border: 1px solid transparent;
+    }
+
+    .verdict-big.safe {
+      background: rgba(16,185,129,0.07);
+      border-color: rgba(16,185,129,0.2);
+    }
+    .verdict-big.warning {
+      background: rgba(245,158,11,0.07);
+      border-color: rgba(245,158,11,0.2);
+    }
+    .verdict-big.danger {
+      background: rgba(239,68,68,0.07);
+      border-color: rgba(239,68,68,0.2);
+    }
+
+    .verdict-big-emoji { font-size: 4rem; display: block; margin-bottom: 12px; }
+    .verdict-big-text { font-size: 1.5rem; font-weight: 900; margin-bottom: 8px; }
+    .verdict-big-sub { font-size: 0.95rem; color: var(--text-secondary); }
+
+    /* Reaction media section */
+    .media-result-section {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 32px;
+    }
+
+    .media-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+
+    .media-tab {
+      padding: 7px 16px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: var(--transition-fast);
+    }
+    .media-tab.active {
+      background: rgba(124,58,237,0.15);
+      border-color: rgba(124,58,237,0.4);
+      color: var(--purple-light);
+    }
+    .media-tab-content { display: none; }
+    .media-tab-content.active { display: block; animation: fadeIn 0.3s ease; }
+
+    /* Calendar info */
+    .calendar-info {
+      background: rgba(6,182,212,0.06);
+      border: 1px solid rgba(6,182,212,0.2);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      font-size: 0.85rem;
+      color: var(--cyan-light);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* Loading state */
+    .calculating-state {
+      display: none;
+      text-align: center;
+      padding: 60px 24px;
+    }
+    .calculating-state.active { display: block; animation: fadeIn 0.3s ease; }
+    .calc-spinner {
+      width: 56px; height: 56px;
+      border: 3px solid rgba(124,58,237,0.2);
+      border-top-color: var(--purple);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 24px;
+    }
+    .calc-messages { color: var(--purple-light); font-weight: 600; font-size: 0.95rem; }
+  </style>
+</head>
+<body>
+  <div id="nav-placeholder"></div>
+
+  <div class="page-wrapper">
+    <div class="bunk-layout">
+
+      <!-- ── PAGE HERO ── -->
+      <div class="page-hero">
+        <div class="page-hero-tag">📊 KTU Attendance Calculator</div>
+        <h1 class="page-title">
+          <span class="gradient-text">INNU CLASSIL POKANO?</span> 💀
+        </h1>
+        <p class="page-subtitle">"Let BUNKVERSE calculate your fate." — "KTU Calendar + Timetable ഉപയോഗിച്ച് exact calculation!"</p>
+      </div>
+
+      <!-- ── KTU INFO BANNER ── -->
+      <div class="calendar-info mb-32 anim-fade-up-1">
+        📅 <span>Using <strong>KTU Academic Calendar 2025–26 & 2026–27</strong>. Holidays &amp; working days calculated automatically. Subject frequency based on standard KTU credit system.</span>
+      </div>
+
+      <!-- ── INPUT FORM ── -->
+      <div class="form-card anim-fade-up-2">
+        <h2 class="section-title mb-24">📝 Enter Your Details</h2>
+
+        <div class="form-grid" style="gap:20px;">
+
+          <!-- Academic Year -->
+          <div class="form-group">
+            <label class="form-label">📅 Academic Year</label>
+            <div class="form-select-wrapper">
+              <select class="form-control" id="academicYear" onchange="updateSemesters()">
+                <option value="2024-25">2024 – 2025</option>
+                <option value="2025-26" selected>2025 – 2026</option>
+                <option value="2026-27">2026 – 2027</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Semester -->
+          <div class="form-group">
+            <label class="form-label">📚 Semester</label>
+            <div class="form-select-wrapper">
+              <select class="form-control" id="semester" onchange="updateBranches()">
+                <option value="S1">S1 — First Semester</option>
+                <option value="S2">S2 — Second Semester</option>
+                <option value="S3">S3 — Third Semester</option>
+                <option value="S4">S4 — Fourth Semester</option>
+                <option value="S5" selected>S5 — Fifth Semester</option>
+                <option value="S6">S6 — Sixth Semester</option>
+                <option value="S7">S7 — Seventh Semester</option>
+                <option value="S8">S8 — Eighth Semester</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Branch -->
+          <div class="form-group">
+            <label class="form-label">🏛️ Branch</label>
+            <div class="form-select-wrapper">
+              <select class="form-control" id="branch" onchange="updateSubjects()">
+                <option value="CSE" selected>CSE — Computer Science &amp; Engineering</option>
+                <option value="ECE">ECE — Electronics &amp; Communication</option>
+                <option value="EEE">EEE — Electrical &amp; Electronics</option>
+                <option value="ME">ME — Mechanical Engineering</option>
+                <option value="CE">CE — Civil Engineering</option>
+                <option value="IT">IT — Information Technology</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Subject -->
+          <div class="form-group">
+            <label class="form-label">📖 Subject</label>
+            <div class="form-select-wrapper">
+              <select class="form-control" id="subject">
+                <!-- Populated by JS -->
+              </select>
+            </div>
+          </div>
+
+          <!-- Bunk Date -->
+          <div class="form-group">
+            <label class="form-label">📆 Bunk Date</label>
+            <input type="date" class="form-control" id="bunkDate">
+          </div>
+
+          <!-- Classes to Bunk -->
+          <div class="form-group">
+            <label class="form-label">💀 Classes to Bunk</label>
+            <input type="number" class="form-control" id="bunkCount" value="1" min="1" max="20" placeholder="How many classes?">
+          </div>
+
+          <!-- Current Bunked (optional) -->
+          <div class="form-group">
+            <label class="form-label">📉 Classes Already Bunked</label>
+            <input type="number" class="form-control" id="alreadyBunked" value="0" min="0" placeholder="Classes bunked so far">
+          </div>
+
+          <!-- Extra Attended -->
+          <div class="form-group">
+            <label class="form-label">✅ Extra Classes Attended</label>
+            <input type="number" class="form-control" id="extraAttended" value="0" min="0" placeholder="Additional classes attended">
+          </div>
+
+        </div>
+
+        <div style="margin-top:32px;">
+          <button class="btn btn-primary btn-full btn-lg" id="calculateBtn" onclick="calculateBunk()">
+            🧮 CALCULATE MY FATE
+          </button>
+        </div>
+      </div>
+
+      <!-- ── CALCULATING STATE ── -->
+      <div class="calculating-state" id="calculatingState">
+        <div class="calc-spinner"></div>
+        <div class="calc-messages" id="calcMessages">Consulting the KTU Calendar...</div>
+        <p style="color:var(--text-muted);font-size:0.85rem;margin-top:12px;">"AI ചിന്തിക്കുന്നു... ഫലം awaiting 🤖"</p>
+      </div>
+
+      <!-- ── RESULT SECTION ── -->
+      <div class="result-section" id="resultSection">
+
+        <!-- Meme / Media Section -->
+        <div class="media-result-section mt-32">
+          <h3 style="font-size:1.1rem;font-weight:700;margin-bottom:20px;">🎬 YOUR REACTION</h3>
+
+          <div class="media-tabs">
+            <button class="media-tab active" onclick="switchMediaTab(this, 'memeTab')">🖼️ Meme</button>
+            <button class="media-tab" onclick="switchMediaTab(this, 'videoTab')">🎬 Video</button>
+            <button class="media-tab" onclick="switchMediaTab(this, 'dialogueTab')">💬 Dialogue</button>
+          </div>
+
+          <div class="media-tab-content active" id="memeTab">
+            <div class="placeholder-box" id="bunkMemeImage">
+              <div class="placeholder-icon-lg">🖼️</div>
+              <div class="placeholder-title">[ ADD YOUR MEME IMAGE HERE ]</div>
+              <div class="placeholder-desc" id="bunkMemeCategory">Category: Based on attendance result</div>
+              <!-- Gallery: image will be injected here by gallery.js if set -->
+            </div>
+          </div>
+
+          <div class="media-tab-content" id="videoTab">
+            <div class="video-placeholder" id="bunkMemeVideo">
+              <div class="play-icon">▶</div>
+              <div class="placeholder-title">[ ADD YOUR VIDEO MEME HERE ]</div>
+              <div class="placeholder-desc">Click to play (once video is added)</div>
+              <video class="media-video" id="bunkVideo" controls preload="none"></video>
+            </div>
+          </div>
+
+          <div class="media-tab-content" id="dialogueTab">
+            <div class="dialogue-box" id="bunkDialogue">
+              <span class="dialogue-placeholder">[ ADD YOUR MOVIE DIALOGUE HERE ]</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Verdict -->
+        <div class="verdict-big mt-24" id="verdictCard">
+          <span class="verdict-big-emoji" id="verdictEmoji">💀</span>
+          <div class="verdict-big-text" id="verdictTitle">—</div>
+          <div class="verdict-big-sub" id="verdictSub">—</div>
+          <div style="margin-top:16px;font-size:0.85rem;color:var(--text-muted);" id="verdictMalayalam">—</div>
+        </div>
+        
+        <h3 class="section-title mt-32" style="text-align:center;">📊 The Math Behind Your Fate</h3>
+
+        <!-- Attendance Display -->
+        <div class="card card-lg mt-16" style="text-align:center;">
+          <div class="attendance-big">
+            <div class="attendance-circle" id="attendanceCircle">
+              <div class="attendance-pct" id="currentPct">—</div>
+              <div class="attendance-pct-label">Current</div>
+            </div>
+            <p style="color:var(--text-secondary);font-size:0.9rem;">→ After bunking <span id="bunkCountDisplay">0</span> class(es):</p>
+            <div style="font-size:2.5rem;font-weight:900;margin-top:8px;" id="afterBunkPct">—</div>
+            <div class="attendance-change" id="attendanceChange"></div>
+          </div>
+        </div>
+
+        <!-- Stats Grid -->
+        <div class="stats-grid mt-16" id="statsGrid">
+          <div class="stat-item">
+            <div class="stat-value gradient-text" id="statConducted">—</div>
+            <div class="stat-label">Classes Conducted</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="statAttended" style="color:var(--green);">—</div>
+            <div class="stat-label">Classes Attended</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="statMissed" style="color:var(--red);">—</div>
+            <div class="stat-label">Already Missed</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value gradient-text-gold" id="statPlannedBunk">—</div>
+            <div class="stat-label">Planned Bunk</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="statUpcoming">—</div>
+            <div class="stat-label">Upcoming Classes</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="statSafeBunks">—</div>
+            <div class="stat-label">Safe Bunks Left</div>
+          </div>
+        </div>
+
+        <!-- Progress bars -->
+        <div class="card mt-16">
+          <h3 style="font-size:1rem;font-weight:700;margin-bottom:20px;">📊 Attendance Breakdown</h3>
+          <div style="display:flex;flex-direction:column;gap:16px;">
+            <div class="progress-bar-wrapper">
+              <div class="progress-bar-label">
+                <span>Current Attendance</span>
+                <span id="progressCurrentPct">—</span>
+              </div>
+              <div class="progress-track">
+                <div class="progress-fill" id="progressCurrent" style="width:0%"></div>
+              </div>
+            </div>
+            <div class="progress-bar-wrapper">
+              <div class="progress-bar-label">
+                <span>Attendance After Bunk</span>
+                <span id="progressAfterPct">—</span>
+              </div>
+              <div class="progress-track">
+                <div class="progress-fill" id="progressAfter" style="width:0%"></div>
+              </div>
+            </div>
+            <div class="progress-bar-wrapper">
+              <div class="progress-bar-label">
+                <span>75% Threshold</span>
+                <span>75%</span>
+              </div>
+              <div class="progress-track">
+                <div class="progress-fill red" style="width:75%;opacity:0.5;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recalculate -->
+        <div style="text-align:center;margin-top:32px;margin-bottom:60px;">
+          <button class="btn btn-ghost" onclick="resetForm()">🔄 Calculate Again</button>
+          <a href="excuse.html" class="btn btn-cyan" style="margin-left:12px;">🤥 Need an Excuse?</a>
+        </div>
+
+      </div><!-- result-section -->
+
+    </div><!-- bunk-layout -->
+  </div><!-- page-wrapper -->
+
+  <div id="footer-placeholder"></div>
+
+  <script src="script.js"></script>
+  <script src="bunk.js"></script>
+</body>
+</html>
