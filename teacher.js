@@ -232,21 +232,25 @@ function displayEmotionResult(detected) {
 
 // ─── Load teacher media ───────────────────────────
 function loadTeacherMedia(category) {
-  const media = Storage.get(`gallery_${category}`, {});
-  document.getElementById('teacherMemeCategory').textContent = `Category: ${category}`;
+  const media = typeof getCategoryMedia === 'function'
+    ? getCategoryMedia(category)
+    : Storage.get(`gallery_${category}`, {});
+
+  const catEl = document.getElementById('teacherMemeCategory');
+  if (catEl) catEl.textContent = `Category: ${category}`;
 
   const memeBox = document.getElementById('teacherMemeImage');
-  if (media.image) {
+  if (memeBox && media.image) {
     memeBox.innerHTML = `<img src="${media.image}" alt="Teacher Meme" style="width:100%;border-radius:var(--radius);max-height:300px;object-fit:cover;">`;
   }
 
   const videoBox = document.getElementById('teacherMemeVideo');
-  if (media.video) {
+  if (videoBox && media.video) {
     videoBox.innerHTML = `<video src="${media.video}" controls style="width:100%;border-radius:var(--radius);max-height:300px;"></video>`;
   }
 
   const dialogueBox = document.getElementById('teacherDialogue');
-  if (media.dialogue) {
+  if (dialogueBox && media.dialogue) {
     dialogueBox.innerHTML = `<em>"${media.dialogue}"</em>`;
   }
 }

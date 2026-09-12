@@ -157,23 +157,72 @@ const PRO_TIPS = [
 
 
 // ─── State ─────────────────────────────────────────
-let selectedCategory = "late";
+let selectedCategories = new Set(["late"]);
+let selectedCategory = "late"; // fallback reference
 let excuseHistory = [];
 
+const CATEGORY_NAMES = {
+  late: "⏰ Came Late",
+  missed: "💀 Missed Class",
+  assignment: "📝 No Assignment",
+  forgot: "🧠 Forgot Something",
+  bus: "🚌 Bus Delay",
+  sleep: "😴 Overslept"
+};
 
-// ─── Category Selection ────────────────────────────
+// ─── Category Selection (Multi-Select Support) ─────
 function selectCategory(cat, btn) {
-  selectedCategory = cat;
+  if (selectedCategories.has(cat)) {
+    if (selectedCategories.size > 1) {
+      selectedCategories.delete(cat);
+    } else {
+      showToast("At least 1 situation must be selected!", "info", 1500);
+      return;
+    }
+  } else {
+    selectedCategories.add(cat);
+  }
 
-  document.querySelectorAll(".category-btn").forEach(function (button) {
-    button.classList.remove("active");
+  // Update button active states
+  document.querySelectorAll(".category-grid .category-btn").forEach(button => {
+    const id = button.id.replace("catBtn-", "");
+    button.classList.toggle("active", selectedCategories.has(id));
   });
 
-  if (btn) {
-    btn.classList.add("active");
-  }
+  updateExcuseCategoryBadge();
 }
 
+function selectAllCategories() {
+  selectedCategories = new Set(["late", "missed", "assignment", "forgot", "bus", "sleep"]);
+  document.querySelectorAll(".category-grid .category-btn").forEach(button => {
+    button.classList.add("active");
+  });
+  showToast("All 6 situations selected! Ultimate Combo Excuse incoming 🌌", "info", 2000);
+  updateExcuseCategoryBadge();
+}
+
+function resetCategories(defaultCat = "late") {
+  selectedCategories = new Set([defaultCat]);
+  document.querySelectorAll(".category-grid .category-btn").forEach(button => {
+    const id = button.id.replace("catBtn-", "");
+    button.classList.toggle("active", id === defaultCat);
+  });
+  updateExcuseCategoryBadge();
+}
+
+function updateExcuseCategoryBadge() {
+  const badge = document.getElementById("excuseCategorySummary");
+  if (!badge) return;
+
+  const labels = Array.from(selectedCategories).map(c => CATEGORY_NAMES[c] || c);
+  if (selectedCategories.size > 1) {
+    badge.innerHTML = `🌌 Selected <strong>${selectedCategories.size} Reasons</strong>: ${labels.join(", ")} (Cosmic Multi-Excuse Combo!)`;
+    badge.style.color = "var(--cyan)";
+  } else {
+    badge.innerHTML = `🎯 Selected: <strong>${labels[0] || "None"}</strong> (Click more to multi-select!)`;
+    badge.style.color = "var(--purple-light)";
+  }
+}
 
 // ─── Counter Animation ─────────────────────────────
 function runCounter(element, start, end, duration, suffix = "") {
@@ -199,7 +248,6 @@ function runCounter(element, start, end, duration, suffix = "") {
   requestAnimationFrame(updateCounter);
 }
 
-
 // ─── Main Generator ────────────────────────────────
 function generateExcuse() {
 
@@ -218,21 +266,34 @@ function generateExcuse() {
   setTimeout(function () {
 
     try {
+      const activeCats = Array.from(selectedCategories);
+      let excuse = "";
 
-      // Get selected category
-      const excuseList = EXCUSES[selectedCategory];
+      if (activeCats.length === 1) {
+        // Single category
+        const cat = activeCats[0];
+        const excuseList = EXCUSES[cat] || EXCUSES.late;
+        excuse = excuseList[Math.floor(Math.random() * excuseList.length)];
+      } else {
+        // Multi-select combo excuse!
+        const excusesPicked = [];
+        activeCats.forEach(cat => {
+          const list = EXCUSES[cat] || [];
+          if (list.length > 0) {
+            excusesPicked.push(list[Math.floor(Math.random() * list.length)]);
+          }
+        });
 
-      if (!excuseList || excuseList.length === 0) {
-        throw new Error("No excuses found for category: " + selectedCategory);
+        if (excusesPicked.length === 2) {
+          excuse = `${excusesPicked[0]} Furthermore, ${excusesPicked[1]}`;
+        } else {
+          excuse = `Cosmic Chain Reaction: ${excusesPicked[0]} On top of that, ${excusesPicked[1]} And finally, ${excusesPicked[2] || excusesPicked[0]}`;
+        }
       }
 
-      // Random excuse
-      const excuse =
-        excuseList[Math.floor(Math.random() * excuseList.length)];
-
-      // Random believability
-      const believability =
-        Math.floor(Math.random() * 35) + 3;
+      // Random believability (drops with more wild excuses)
+      const maxBelief = Math.max(5, 40 - (activeCats.length - 1) * 8);
+      const believability = Math.floor(Math.random() * maxBelief) + 3;
 
       // Random teacher reaction
       const reaction =
@@ -459,44 +520,19 @@ function generateExcuse() {
 
 // ─── Load Gallery Media Safely ────────────────────
 function loadExcuseMedia() {
-
   let media = {};
 
   try {
-
-    // Check project Storage helper
-    if (
-      window.Storage &&
-      typeof window.Storage.get === "function"
-    ) {
-
-      media =
-        window.Storage.get(
-          "gallery_excuse",
-          {}
-        ) || {};
-
+    if (typeof getCategoryMedia === 'function') {
+      media = getCategoryMedia('excuse');
+    } else if (window.Storage && typeof window.Storage.get === 'function') {
+      media = window.Storage.get('gallery_excuse', {}) || {};
     } else {
-
-      // Fallback to browser localStorage
-      const saved =
-        window.localStorage.getItem(
-          "gallery_excuse"
-        );
-
-      if (saved) {
-        media = JSON.parse(saved);
-      }
-
+      const saved = window.localStorage.getItem('bunkverse_gallery_excuse');
+      if (saved) media = JSON.parse(saved);
     }
-
   } catch (error) {
-
-    console.warn(
-      "Gallery media could not be loaded:",
-      error
-    );
-
+    console.warn("Gallery media could not be loaded:", error);
     media = {};
   }
 

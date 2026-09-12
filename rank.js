@@ -257,23 +257,35 @@ function loadRankMedia(attendancePct) {
   else if (attendancePct >= 75) category = '75to79';
   else category = 'below75';
 
-  document.getElementById('rankMemeCategory').textContent = `Category: ${category}`;
+  const catEl = document.getElementById('rankMemeCategory');
+  if (catEl) catEl.textContent = `Category: ${category}`;
 
-  const media = Storage.get(`gallery_${category}`, {});
+  const media = typeof getCategoryMedia === 'function'
+    ? getCategoryMedia(category)
+    : Storage.get(`gallery_${category}`, {});
 
   const memeBox = document.getElementById('rankMemeImage');
-  if (media.image) {
+  if (memeBox && media.image) {
     memeBox.innerHTML = `<img src="${media.image}" alt="Rank Meme" style="width:100%;border-radius:var(--radius);max-height:300px;object-fit:cover;">`;
   }
 
   const videoBox = document.getElementById('rankMemeVideo');
-  if (media.video) {
+  if (videoBox && media.video) {
     videoBox.innerHTML = `<video src="${media.video}" controls style="width:100%;border-radius:var(--radius);max-height:300px;"></video>`;
   }
 
   const dialogueBox = document.getElementById('rankDialogue');
-  if (media.dialogue) {
+  if (dialogueBox && media.dialogue) {
     dialogueBox.innerHTML = `<em>"${media.dialogue}"</em>`;
+  }
+
+  // Set default profile avatar from user photos if not custom
+  const img = document.getElementById('profileAvatarImg');
+  const placeholder = document.querySelector('.profile-avatar-placeholder');
+  if (img && (!img.src || img.style.display === 'none')) {
+    img.src = 'krishnaa/sureshgopi pfp.jpg';
+    img.style.display = 'block';
+    if (placeholder) placeholder.style.display = 'none';
   }
 }
 

@@ -235,28 +235,264 @@ function getSemesterInfo(academicYear, semCode) {
   return { ...cal.even, holidays: cal.holidays };
 }
 
-// ─── Populate subjects dropdown ───────────────────
+// ─── State for Multi-Select Subjects & Periods ────
+let isMultiSubjectMode = false;
+let selectedSubjectIndices = new Set([0]);
+let selectedPeriods = new Set([1]);
+
+// ─── Populate subjects dropdown & interactive chips ───
 function updateSubjects() {
   const branch = document.getElementById('branch').value;
   const sem = document.getElementById('semester').value;
   const select = document.getElementById('subject');
+  const tagsContainer = document.getElementById('subjectTags');
   select.innerHTML = '';
+  if (tagsContainer) tagsContainer.innerHTML = '';
 
   const subs = (SUBJECTS[branch] && SUBJECTS[branch][sem]) || [];
   if (subs.length === 0) {
     select.innerHTML = '<option value="CUSTOM">Custom Subject (3 classes/week)</option>';
+    if (tagsContainer) {
+      tagsContainer.innerHTML = '<span class="subject-tag selected">Custom Subject (3 classes/week)</span>';
+    }
+    selectedSubjectIndices = new Set(['CUSTOM']);
+    updateSubjectBadge();
     return;
   }
+
+  // Populate dropdown options
   subs.forEach((s, i) => {
     const opt = document.createElement('option');
     opt.value = i;
-    opt.textContent = `${s.name} (${s.code})`;
+    opt.textContent = `${s.name} (${s.code}) — ${s.classesPerWeek} hrs/week`;
     select.appendChild(opt);
   });
+
+  // Ensure selected indices are valid
+  if (!selectedSubjectIndices.has(0) && selectedSubjectIndices.size === 0) {
+    selectedSubjectIndices = new Set([0]);
+  }
+  // Remove invalid indices if semester changed
+  selectedSubjectIndices.forEach(idx => {
+    if (typeof idx === 'number' && idx >= subs.length) {
+      selectedSubjectIndices.delete(idx);
+    }
+  });
+  if (selectedSubjectIndices.size === 0) {
+    selectedSubjectIndices = new Set([0]);
+  }
+
+  // Populate interactive subject tags
+  if (tagsContainer) {
+    subs.forEach((s, i) => {
+      const tag = document.createElement('button');
+      tag.type = 'button';
+      tag.className = 'subject-tag' + (selectedSubjectIndices.has(i) ? ' selected' : '');
+      tag.id = `subTag_${i}`;
+      tag.innerHTML = `<span>📚</span> <strong>${s.code}</strong> ${s.name} (${s.classesPerWeek}h)`;
+      tag.onclick = () => toggleSubjectTag(i);
+      tagsContainer.appendChild(tag);
+    });
+  }
+
+  // Sync dropdown with first selected
+  const firstSelected = Array.from(selectedSubjectIndices)[0];
+  if (firstSelected !== undefined && select.options[firstSelected]) {
+    select.selectedIndex = firstSelected;
+  }
+
+  updateSubjectBadge();
 }
 
-function updateSemesters() { updateSubjects(); }
-function updateBranches() { updateSubjects(); }
+// ─── Interactive Subject Tag Selection ────────────
+function toggleSubjectTag(index) {
+  if (isMultiSubjectMode) {
+    // Multi-subject toggle: can select multiple buttons!
+    if (selectedSubjectIndices.has(index)) {
+      if (selectedSubjectIndices.size > 1) {
+        selectedSubjectIndices.delete(index);
+      } else {
+        showToast('At least 1 subject must be selected!', 'info', 1500);
+        return;
+      }
+    } else {
+      selectedSubjectIndices.add(index);
+    }
+  } else {
+    // Single-select mode: pick this one
+    selectedSubjectIndices = new Set([index]);
+    const select = document.getElementById('subject');
+    if (select && select.options[index]) {
+      select.selectedIndex = index;
+    }
+  }
+
+  // Update tag styling
+  document.querySelectorAll('.subject-tag').forEach((el, i) => {
+    el.classList.toggle('selected', selectedSubjectIndices.has(i));
+  });
+
+  updateSubjectBadge();
+}
+
+function toggleMultiSubjectMode() {
+  isMultiSubjectMode = !isMultiSubjectMode;
+  const btn = document.getElementById('multiSubjectModeBtn');
+  if (btn) {
+    btn.textContent = isMultiSubjectMode ? '✅ Multi-Subject: ON (Click to Pick Many)' : '✨ Toggle Multi-Subject Mode';
+    btn.className = isMultiSubjectMode ? 'btn btn-primary btn-xs' : 'btn btn-ghost btn-xs';
+  }
+  showToast(isMultiSubjectMode ? 'Multi-subject mode enabled! Click multiple subjects 📚' : 'Single subject mode enabled', 'info', 1800);
+  updateSubjectBadge();
+}
+
+function syncSubjectFromDropdown() {
+  const select = document.getElementById('subject');
+  const val = parseInt(select.value);
+  if (!isNaN(val)) {
+    selectedSubjectIndices = new Set([val]);
+    document.querySelectorAll('.subject-tag').forEach((el, i) => {
+      el.classList.toggle('selected', i === val);
+    });
+    updateSubjectBadge();
+  }
+}
+
+function updateSubjectBadge() {
+  const badge = document.getElementById('subjectSelectionBadge');
+  if (!badge) return;
+
+  const branch = document.getElementById('branch').value;
+  const sem = document.getElementById('semester').value;
+  const subs = (SUBJECTS[branch] && SUBJECTS[branch][sem]) || [];
+
+  const selectedNames = Array.from(selectedSubjectIndices).map(idx => {
+    if (idx === 'CUSTOM') return 'Custom Subject';
+    return subs[idx] ? subs[idx].code : `Sub #${idx + 1}`;
+  });
+
+  if (selectedSubjectIndices.size > 1) {
+    badge.innerHTML = `📚 Selected (${selectedSubjectIndices.size} subjects): <strong>${selectedNames.join(', ')}</strong> (Impact calculated cumulatively)`;
+  } else {
+    badge.innerHTML = `📌 Selected subject: <strong>${selectedNames[0] || 'None'}</strong> — Click subject tags to switch or multi-select`;
+  }
+}
+
+// ─── Semester & Branch Pill Button Sync ───────────
+function setSemester(semCode) {
+  const select = document.getElementById('semester');
+  if (select) select.value = semCode;
+  document.querySelectorAll('#semesterPills .pill-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.textContent.trim() === semCode);
+  });
+  updateSubjects();
+}
+
+function syncSemesterFromDropdown() {
+  const select = document.getElementById('semester');
+  if (select) {
+    document.querySelectorAll('#semesterPills .pill-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.textContent.trim() === select.value);
+    });
+  }
+  updateSubjects();
+}
+
+function setBranch(branchCode) {
+  const select = document.getElementById('branch');
+  if (select) select.value = branchCode;
+  document.querySelectorAll('#branchPills .pill-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.textContent.trim() === branchCode);
+  });
+  updateSubjects();
+}
+
+function syncBranchFromDropdown() {
+  const select = document.getElementById('branch');
+  if (select) {
+    document.querySelectorAll('#branchPills .pill-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.textContent.trim() === select.value);
+    });
+  }
+  updateSubjects();
+}
+
+function updateSemesters() { syncSemesterFromDropdown(); }
+function updateBranches() { syncBranchFromDropdown(); }
+
+// ─── Multi-Period Selector Logic ──────────────────
+function togglePeriod(periodNum) {
+  if (selectedPeriods.has(periodNum)) {
+    selectedPeriods.delete(periodNum);
+  } else {
+    selectedPeriods.add(periodNum);
+  }
+
+  // Update button visual state
+  const btn = document.getElementById(`periodBtn_${periodNum}`);
+  if (btn) btn.classList.toggle('selected', selectedPeriods.has(periodNum));
+
+  // Sync to bunkCount input
+  const bunkInput = document.getElementById('bunkCount');
+  if (bunkInput) bunkInput.value = selectedPeriods.size;
+
+  updatePeriodSummary();
+}
+
+function selectPeriodsPreset(preset) {
+  selectedPeriods = new Set();
+  if (preset === 'all') {
+    selectedPeriods = new Set([1, 2, 3, 4, 5, 6]);
+  } else if (preset === 'morning') {
+    selectedPeriods = new Set([1, 2, 3]);
+  } else if (preset === 'afternoon') {
+    selectedPeriods = new Set([4, 5, 6]);
+  } else if (preset === 'p1') {
+    selectedPeriods = new Set([1]);
+  } // 'none' leaves it empty
+
+  // Update all 6 buttons
+  for (let i = 1; i <= 6; i++) {
+    const btn = document.getElementById(`periodBtn_${i}`);
+    if (btn) btn.classList.toggle('selected', selectedPeriods.has(i));
+  }
+
+  const bunkInput = document.getElementById('bunkCount');
+  if (bunkInput) bunkInput.value = selectedPeriods.size;
+
+  updatePeriodSummary();
+}
+
+function syncBunkCountToPeriods() {
+  const count = parseInt(document.getElementById('bunkCount').value) || 0;
+  selectedPeriods = new Set();
+
+  for (let i = 1; i <= 6; i++) {
+    const btn = document.getElementById(`periodBtn_${i}`);
+    const shouldSelect = i <= count;
+    if (shouldSelect) selectedPeriods.add(i);
+    if (btn) btn.classList.toggle('selected', shouldSelect);
+  }
+
+  updatePeriodSummary();
+}
+
+function updatePeriodSummary() {
+  const summaryEl = document.getElementById('periodSelectionSummary');
+  if (!summaryEl) return;
+
+  const sorted = Array.from(selectedPeriods).sort((a, b) => a - b);
+  const count = parseInt(document.getElementById('bunkCount').value) || sorted.length;
+
+  if (sorted.length === 0) {
+    summaryEl.innerHTML = `⚠️ No periods selected (0 classes). Click period buttons above!`;
+    summaryEl.style.color = 'var(--gold)';
+  } else {
+    const listStr = sorted.map(p => `P${p}`).join(', ');
+    summaryEl.innerHTML = `🎯 Selected: <strong>${listStr}</strong> (${count} class${count > 1 ? 'es' : ''})`;
+    summaryEl.style.color = 'var(--cyan)';
+  }
+}
 
 // ─── Media tab switcher ───────────────────────────
 function switchMediaTab(tabEl, tabId) {
@@ -271,9 +507,8 @@ function calculateBunk() {
   const academicYear = document.getElementById('academicYear').value;
   const semCode = document.getElementById('semester').value;
   const branch = document.getElementById('branch').value;
-  const subjectIndex = document.getElementById('subject').value;
   const bunkDateStr = document.getElementById('bunkDate').value;
-  const bunkCount = parseInt(document.getElementById('bunkCount').value) || 1;
+  const bunkCount = parseInt(document.getElementById('bunkCount').value) || selectedPeriods.size || 1;
   const alreadyBunked = parseInt(document.getElementById('alreadyBunked').value) || 0;
   const extraAttended = parseInt(document.getElementById('extraAttended').value) || 0;
 
@@ -285,9 +520,17 @@ function calculateBunk() {
   const subs = SUBJECTS[branch] && SUBJECTS[branch][semCode];
   let classesPerWeek = 3; // default
   let subjectName = 'Custom Subject';
-  if (subs && subjectIndex !== 'CUSTOM') {
-    const sub = subs[parseInt(subjectIndex)];
-    if (sub) { classesPerWeek = sub.classesPerWeek; subjectName = sub.name; }
+
+  if (subs && selectedSubjectIndices.size > 0) {
+    const selectedSubs = Array.from(selectedSubjectIndices)
+      .map(i => subs[i])
+      .filter(Boolean);
+
+    if (selectedSubs.length > 0) {
+      const totalWeekly = selectedSubs.reduce((acc, s) => acc + s.classesPerWeek, 0);
+      classesPerWeek = Math.round(totalWeekly / selectedSubs.length);
+      subjectName = selectedSubs.map(s => s.name).join(' & ');
+    }
   }
 
   // Show calculating state
@@ -295,11 +538,13 @@ function calculateBunk() {
   document.getElementById('calculatingState').classList.add('active');
   document.getElementById('calculateBtn').classList.add('btn-loading');
 
+  const subLabel = selectedSubjectIndices.size > 1 ? `${selectedSubjectIndices.size} Selected Subjects` : subjectName;
+
   const calcMsgs = [
     '📅 Consulting KTU Academic Calendar...',
     '🗓️ Counting working days & holidays...',
-    `📚 Analyzing "${subjectName}" frequency...`,
-    '🧮 Running attendance algorithms...',
+    `📚 Analyzing "${subLabel}" frequency...`,
+    `💀 Evaluating impact of bunking ${bunkCount} class(es)...`,
     '🤖 Consulting the Bunk Oracle...',
     '💀 Calculating your fate...',
   ];
@@ -419,7 +664,40 @@ function displayResult(data) {
   resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-// ─── Load media from gallery (localStorage) ──────
+// ─── Direct Media Switchers for Bunk Reaction ────────
+function setBunkMediaImage(src, caption, btnEl) {
+  const img = document.getElementById('activeMemeImg') || document.querySelector('#bunkMemeImage img');
+  if (img) img.src = src;
+  const cap = document.getElementById('bunkMemeCategory');
+  if (cap) cap.textContent = `Reaction: ${caption}`;
+
+  if (btnEl) {
+    document.querySelectorAll('#bunkMemeImage .reaction-btn').forEach(b => b.classList.remove('selected-reaction'));
+    btnEl.classList.add('selected-reaction');
+  }
+
+  showToast(`Switched meme: ${caption}`, 'info', 1500);
+}
+
+function setBunkMediaVideo(src, caption, btnEl) {
+  const vid = document.getElementById('bunkVideoPlayer') || document.querySelector('#bunkMemeVideo video');
+  if (vid) {
+    vid.src = src;
+    vid.load();
+    vid.play().catch(() => {});
+  }
+  const cap = document.getElementById('bunkVideoCaption');
+  if (cap) cap.textContent = caption;
+
+  if (btnEl) {
+    document.querySelectorAll('#bunkMemeVideo .reaction-btn').forEach(b => b.classList.remove('selected-reaction'));
+    btnEl.classList.add('selected-reaction');
+  }
+
+  showToast(`Switched video reaction! 🎬`, 'info', 1500);
+}
+
+// ─── Load media from gallery (Storage with Preset Fallback) ──────
 function loadGalleryMedia(pct) {
   let category;
   if (pct >= 90) category = 'above90';
@@ -427,49 +705,96 @@ function loadGalleryMedia(pct) {
   else if (pct >= 75) category = '75to79';
   else category = 'below75';
 
-  document.getElementById('bunkMemeCategory').textContent = `Category: ${getCategoryLabel(category)}`;
+  const categoryLabel = getCategoryLabel(category);
+  const media = typeof getCategoryMedia === 'function'
+    ? getCategoryMedia(category)
+    : (Storage.get(`gallery_${category}`, {}));
 
-  const media = Storage.get(`gallery_${category}`, {});
-
-  // Image
-  const memeBox = document.getElementById('bunkMemeImage');
-  if (media.image) {
-    memeBox.innerHTML = `<img src="${media.image}" alt="Meme" style="width:100%;border-radius:var(--radius);max-height:300px;object-fit:cover;">`;
-  } else {
-    memeBox.innerHTML = `
-      <div class="placeholder-icon-lg">🖼️</div>
-      <div class="placeholder-title">[ ADD YOUR MEME IMAGE HERE ]</div>
-      <div class="placeholder-desc" id="bunkMemeCategory">Category: ${getCategoryLabel(category)}</div>`;
+  // Update image
+  const img = document.getElementById('activeMemeImg');
+  const catEl = document.getElementById('bunkMemeCategory');
+  if (img && media.image) {
+    img.src = media.image;
+    if (catEl) catEl.textContent = `Reaction: ${categoryLabel} ${media.isCustomImage ? '• Custom' : '• From Files'}`;
+  } else if (!img) {
+    const memeBox = document.getElementById('bunkMemeImage');
+    if (memeBox && media.image) {
+      memeBox.innerHTML = `
+        <img id="activeMemeImg" src="${media.image}" alt="${categoryLabel} Meme" style="width:100%;max-height:360px;object-fit:contain;border-radius:var(--radius);background:#000;box-shadow:0 8px 24px rgba(0,0,0,0.4);">
+        <div style="margin-top:10px;font-size:0.85rem;color:var(--purple-light);font-weight:600;" id="bunkMemeCategory">Reaction: ${categoryLabel}</div>`;
+    }
   }
 
-  // Video
-  const videoBox = document.getElementById('bunkMemeVideo');
-  if (media.video) {
-    videoBox.innerHTML = `<video src="${media.video}" controls style="width:100%;border-radius:var(--radius);max-height:300px;"></video>`;
+  // Update video
+  const vid = document.getElementById('bunkVideoPlayer');
+  const vidCap = document.getElementById('bunkVideoCaption');
+  if (vid && media.video) {
+    vid.src = media.video;
+    vid.load();
+    if (vidCap) vidCap.textContent = `🎬 Reaction Video: ${categoryLabel}`;
+  } else if (!vid) {
+    const videoBox = document.getElementById('bunkMemeVideo');
+    if (videoBox && media.video) {
+      videoBox.innerHTML = `
+        <video id="bunkVideoPlayer" src="${media.video}" controls playsinline preload="auto" style="width:100%;max-height:360px;border-radius:var(--radius);background:#000;box-shadow:0 8px 24px rgba(0,0,0,0.4);"></video>
+        <div style="margin-top:10px;font-size:0.85rem;color:var(--cyan);font-weight:600;" id="bunkVideoCaption">🎬 Reaction Video: ${categoryLabel}</div>`;
+    }
   }
 
-  // Dialogue
-  const dialogueBox = document.getElementById('bunkDialogue');
-  if (media.dialogue) {
-    dialogueBox.innerHTML = `<em>"${media.dialogue}"</em>`;
+  // Update dialogue
+  const diaText = document.getElementById('activeDialogueText');
+  const diaCap = document.getElementById('dialogueCaption');
+  if (diaText && media.dialogue) {
+    diaText.textContent = `"${media.dialogue}"`;
+    if (diaCap) diaCap.textContent = `${categoryLabel} Dialogue Reaction`;
   }
 }
 
 function getCategoryLabel(cat) {
-  const labels = { above90: '90%+ Attendance', '80to89': '80–89%', '75to79': '75–79%', below75: 'Below 75%' };
+  const labels = {
+    above90: '90%+ Attendance 😇',
+    '80to89': '80–89% Attendance 😎',
+    '75to79': '75–79% Attendance 😬',
+    below75: 'Below 75% Attendance 💀'
+  };
   return labels[cat] || cat;
+}
+
+function toggleReactionPreview() {
+  const resultSec = document.getElementById('resultSection');
+  const btn = document.getElementById('toggleReactionPreviewBtn');
+  if (resultSec) {
+    const isVisible = resultSec.classList.contains('visible');
+    if (isVisible) {
+      resultSec.classList.remove('visible');
+      if (btn) btn.textContent = '👀 Preview / Test Reactions';
+    } else {
+      resultSec.classList.add('visible');
+      if (btn) btn.textContent = '🙈 Hide Preview';
+      // Load default media if not populated
+      loadGalleryMedia(85);
+      resultSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
 }
 
 function resetForm() {
   document.getElementById('resultSection').classList.remove('visible');
+  const previewBtn = document.getElementById('toggleReactionPreviewBtn');
+  if (previewBtn) previewBtn.textContent = '👀 Preview / Test Reactions';
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 // ─── Init ─────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   updateSubjects();
-  // Set default date to today
+  // Set default date to today, allow picking future dates
   const today = new Date().toISOString().split('T')[0];
-  document.getElementById('bunkDate').value = today;
-  document.getElementById('bunkDate').max = today;
+  const dateInput = document.getElementById('bunkDate');
+  if (dateInput) {
+    dateInput.value = today;
+    dateInput.max = '2027-06-30';
+  }
+  // Initialize period selection (Period 1 selected by default)
+  selectPeriodsPreset('p1');
 });
